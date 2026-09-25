@@ -1,0 +1,46 @@
+{
+  "tick_s": 0.01,
+  "max_depth_age_s": 0.05,
+  "flow_warmup_s": 0.05,
+  "roi_margin_px": 3,
+  "roi_depth_margin_m": 0.08,
+  "flow": {
+    "search_radius": 2,
+    "history_per_pixel": 3,
+    "max_age_s": 0.05,
+    "min_dt_s": 1e-05,
+    "relative_interval_tolerance": 0.3,
+    "min_speed": 2.0,
+    "max_speed": 2000.0,
+    "roi_size": 8,
+    "max_candidates": 6,
+    "consensus_events": 8,
+    "consensus_max_age_s": 0.02,
+    "min_consensus_events": 2
+  },
+  "velocity": {
+    "alpha": 0.5,
+    "decay_reference_s": 0.01,
+    "process_linear_std": 0.5,
+    "process_angular_std": 1.0,
+    "initial_linear_std": 1.0,
+    "initial_angular_std": 2.0,
+    "flow_noise_std": 20.0,
+    "laplace_scale": 20.0,
+    "min_weight": 1e-06,
+    "normal_flow": true,
+    "weighting": true
+  },
+  "pose": {
+    "initial_position_std": 0.02,
+    "initial_rotation_std": 0.08,
+    "process_position_std": 0.02,
+    "process_rotation_std": 0.1,
+    "measurement_position_std": 0.01,
+    "measurement_rotation_std": 0.05,
+    "gate_threshold": null,
+    "sigma_alpha": 1.0,
+    "sigma_beta": 2.0,
+    "sigma_kappa": 0.0
+  }
+}

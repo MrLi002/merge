@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "event-sixdof-reproduction"
+version = "0.2.0"
+description = "E-RAFT/triplet event flow, dense velocity KF and quaternion pose tracking research baseline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10", "opencv-python>=4.8", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+synthetic = ["moderngl==5.12.0", "glcontext==3.0.0", "Pillow>=9"]
+visualization = ["plotly>=5.20"]
+flow = ["torch>=2.5.1", "h5py>=3.8", "hdf5plugin>=4"]
+
+[project.scripts]
+ev6d = "ev6d.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ev6d*"]
+
+[tool.setuptools.package-data]
+"ev6d.vendor.eraft" = ["LICENSE", "UPSTREAM.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

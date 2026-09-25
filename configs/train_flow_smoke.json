@@ -1,0 +1,6 @@
+{
+  "model": {"num_bins": 15, "iterations": 2, "window_s": 0.1, "normalize": true, "device": "cuda"},
+  "data": {"root": "output/completion_20260923/dsec_fixture", "train_sequences": ["synthetic_train"], "val_sequences": ["synthetic_val"], "crop_size": [128, 128], "augment": false},
+  "training": {"output_dir": "output/completion_20260923/flow_smoke", "epochs": 3, "max_steps": 4, "batch_size": 1, "num_workers": 0, "seed": 1234, "lr": 0.00002, "weight_decay": 0.0001, "epsilon": 1e-8, "clip_grad": 1.0, "gamma": 0.8, "max_flow": 400, "checkpoint_every": 1, "validate_every": 1, "freeze_batch_norm": true, "deterministic": false},
+  "initialization": {"checkpoint": null}
+}

@@ -1,0 +1,6 @@
+{
+  "model": {"num_bins": 15, "iterations": 12, "window_s": 0.1, "normalize": true, "device": "cuda"},
+  "data": {"root": "data/dsec/train", "train_sequences": ["zurich_city_01_a"], "val_sequences": ["zurich_city_02_a"], "crop_size": [288, 384], "augment": true},
+  "training": {"output_dir": "output/dsec_finetune", "epochs": 100, "max_steps": 100000, "batch_size": 1, "num_workers": 0, "seed": 1234, "lr": 0.00002, "weight_decay": 0.0001, "epsilon": 1e-8, "clip_grad": 1.0, "gamma": 0.8, "max_flow": 400, "checkpoint_every": 1000, "validate_every": 1000, "freeze_batch_norm": true, "deterministic": false},
+  "initialization": {"checkpoint": "checkpoints/dsec.tar"}
+}

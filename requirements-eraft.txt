@@ -1,0 +1,5 @@
+# Install your CUDA wheel first; see README. This file also supports CPU runs.
+-r requirements.txt
+torch>=2.5.1
+h5py>=3.8
+hdf5plugin>=4

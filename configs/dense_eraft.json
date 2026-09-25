@@ -1,0 +1,11 @@
+{
+  "checkpoint": null,
+  "eraft": {"num_bins": 15, "iterations": 12, "window_s": 0.1, "normalize": true, "device": "cuda"},
+  "velocity": {"flow_noise_std": 1.0, "flow_noise_units": "displacement", "noise_inflation": 4.0, "max_observations": 512, "gate_mahalanobis_sq": 25.0, "decay_rate_per_s": 0.0},
+  "max_depth_age_s": 0.025,
+  "mask_policy": "auto",
+  "history": {"max_history_s": 2.0, "max_intervals": 1000, "max_pose_measurements": 1000},
+  "allow_oracle_pose": false,
+  "use_pose_observations": true,
+  "flow_latency_s": 0.0
+}

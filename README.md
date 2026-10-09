@@ -53,6 +53,7 @@ python -m ev6d --help
 python -m ev6d prepare-rgb --sequence /data/sequence --output work/rgb
 python -m ev6d run-dope \
   --dope-repo /path/to/Deep_Object_Pose \
+  --dope-python /path/to/dope-env/bin/python \
   --rgb-dir work/rgb --output work/dope \
   --weights /path/to/ycb_weights.pth \
   --config /path/to/config_pose.yaml \

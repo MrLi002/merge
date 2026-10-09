@@ -1,0 +1,27 @@
+{
+  "eraft": {
+    "num_bins": 15,
+    "iterations": 12,
+    "window_s": 0.1,
+    "normalize": true,
+    "device": "cuda"
+  },
+  "velocity": {
+    "max_observations": 512,
+    "min_observations": 6,
+    "flow_noise_std": 1,
+    "noise_inflation": 4,
+    "decay_rate_per_s": 0
+  },
+  "pose": {},
+  "max_depth_age_s": 0.035,
+  "flow_latency_s": 0,
+  "dope_delay_s": 0,
+  "dope_translation_unit": "m",
+  "event_time_offset_s": 0,
+  "timestamp_scale": 1,
+  "mask_kind": "instance",
+  "assume_coregistered": true,
+  "T_event_rgb": null,
+  "dope_max_hz": 5
+}

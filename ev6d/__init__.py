@@ -1,3 +1,2 @@
-"""Independent, auditable reproduction of Li et al. (2025)."""
-
-__version__ = "0.1.0"
+"""6D event/RGB tracking: E-RAFT + velocity KF + DOPE + quaternion UKF."""
+__version__ = "1.0.0"

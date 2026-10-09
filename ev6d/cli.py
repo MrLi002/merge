@@ -53,6 +53,7 @@ def main(argv=None):
 
     dope=cmds.add_parser("run-dope",help="Run official NVIDIA DOPE on prepared RGB images")
     dope.add_argument("--dope-repo",required=True,type=Path)
+    dope.add_argument("--dope-python",type=Path,help="DOPE environment Python executable")
     dope.add_argument("--rgb-dir",required=True,type=Path)
     dope.add_argument("--output",required=True,type=Path)
     dope.add_argument("--weights",required=True,type=Path)
@@ -68,7 +69,7 @@ def main(argv=None):
         script=(args.dope_repo/"inference"/"inference.py").resolve()
         if not script.is_file():
             raise FileNotFoundError(script)
-        command=[sys.executable,str(script),"--data",str(args.rgb_dir.resolve()),
+        command=[str(args.dope_python.resolve()) if args.dope_python else sys.executable,str(script),"--data",str(args.rgb_dir.resolve()),
                  "--outf",str(args.output.resolve()),"--weights",str(args.weights.resolve()),
                  "--config",str(args.config.resolve()),"--camera",str(args.camera.resolve()),
                  "--object",args.object]

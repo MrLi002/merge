@@ -65,3 +65,39 @@ def test_flow_result_units_and_shape():
                       "event_rectified",np.ones((1,8,8),bool))
     assert sample.dt==pytest.approx(.1)
     assert sample.valid_mask.all()
+
+
+def test_tracking_handoff_with_mock_flow(tmp_path,monkeypatch):
+    """Exercise file -> flow observation -> KF -> DOPE -> UKF without pretending
+    that random/mock E-RAFT output establishes optical-flow accuracy."""
+    root=example_sequence(tmp_path,monkeypatch)
+    import ev6d.runner as runner
+
+    class FakeERAFT:
+        def __init__(self, checkpoint, config):
+            self.config=config
+        def infer(self, old, new, t_start, t_end, width, height, available_at=None):
+            return FlowResult(np.zeros((1,2,height,width),np.float32),
+                t_start,t_end,"event_rectified",np.ones((1,height,width),bool),
+                available_at=available_at)
+
+    monkeypatch.setattr(runner,"ERAFTFrontend",FakeERAFT)
+    config=tmp_path/"config.json"
+    config.write_text(json.dumps({"eraft":{"window_s":0.1},
+                                  "assume_coregistered":True,
+                                  "dope_max_hz":5.0}))
+    out=tmp_path/"tracking"
+    report=runner.track(root,tmp_path/"unused-checkpoint.tar",out,
+                        config=config,allow_annotation_mask=True)
+    assert report["flow_intervals"]==2
+    assert (root/"result.csv").is_file()
+    with (root/"result.csv").open() as f:
+        assert len(f.readlines())==3  # header + 2 velocity measurements
+    assert (out/"trajectory.csv").is_file()
+    diagnostic=json.loads((out/"diagnostics.json").read_text())
+    assert diagnostic["oracle_mask"] is True
+    assert diagnostic["gt_used_for_tracking"] is False
+
+    with pytest.raises(FileExistsError):
+        runner.track(root,tmp_path/"unused-checkpoint.tar",tmp_path/"again",
+                     config=config,allow_annotation_mask=True)

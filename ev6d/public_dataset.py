@@ -14,7 +14,6 @@ import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from .geometry import register_depth
 
 
 @dataclass(frozen=True)
@@ -95,7 +94,8 @@ class PublicYCBSequence:
             raise ValueError("RGB/depth image sizes mismatch; require explicit reprojection")
         self.start, self.end = 0., float(self.frames[-1].t)
         self.events = self._load_events(event_time_offset_s)
-        if not len(self.events) or np.diff(self.events[:, 0]).min(initial=0) < 0:
+        if (not len(self.events) or not np.isfinite(self.events).all()
+                or np.diff(self.events[:, 0]).min(initial=0) < 0):
             raise ValueError("Empty or unsorted events")
         if self.events[-1, 0] < 0 or self.events[0, 0] > self.end:
             raise ValueError("No overlap between event and RGB clocks; check offset")

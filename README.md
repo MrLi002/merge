@@ -1,112 +1,96 @@
-# E-RAFT + RGB-D 6DoF 研究基线
+# Event / RGB-D 6-DoF Object Tracker
 
-在现有 `ev6d` 上增量补齐：**E-RAFT 事件光流 → 完整二维观测的六维空间速度 KF → 位置/四元数 UKF + 低频位姿与延迟重放**。提供独立 DSEC-Flow 训练/微调、恢复、光流缓存、因果跟踪回放、评测及投影图；原 triplet 前端和命令保留。
+**唯一主线：E-RAFT 事件光流 → 六维速度 KF → RGB 图像的 NVIDIA DOPE 位姿 → 四元数 UKF。**
 
-这是三篇论文方法的工程组合，不代表论文精度或实时性复现。本次 **256 项测试通过**，已跑通短训练/恢复、权重加载及直接/缓存跟踪。已运行与未运行项目见 [本次验证](docs/completion_validation.md)，方法来源见 [审计报告](docs/method_audit.md)，附件逐项对应见 [实现索引](docs/requirements_mapping.md)，状态/公式见 [稠密几何](docs/dense_geometry.md)。[旧 README](docs/legacy_triplet_readme.md) 和旧实验记录保留作历史参考。
+基于 Li et al., *6-DoF Object Tracking with Event-based Optical Flow and Frames* 的两阶段滤波思路，并使用 E-RAFT 的稠密事件光流。项目按照 [Hybrid Object Tracking with Events and Frames](https://github.com/event-driven-robotics/Hybrid-object-tracking-with-events-and-frames) 的公开 UE/YCB 数据目录组织输入。
 
-## 保护与来源
+**已移除** Triplet、事件合成和 YCB 数据生成、DSEC 训练/微调、备选跟踪路线及与主流程无关的实验脚本。保留 E-RAFT 的 MIT 上游许可。DOPE 源代码、模型权重及公开数据集不复制进本仓库。
 
-只修改当前 `merge`，未改写相邻 `6DOF` 的源码、数据和结果。源码原件已备份至 `backup_completion_20260923_194704/`。当前目录没有 Git 元数据；未创建提交或 PR。新训练、缓存和稠密跟踪拒绝覆盖非空输出目录，恢复训练使用新目录。命令在项目根目录执行，配置中的相对路径相对执行目录。
+## 公开数据集
 
-E-RAFT 固定提交 `c58ce0524ea0ebfa9849991caafb547f44fe9bfd`，ROFT 固定提交 `cee79752d9bc3759cc2ed02c1e57a278ae342d6d`。保留官方 E-RAFT 的 MIT 许可证与[兼容修改说明](ev6d/vendor/eraft/UPSTREAM.md)。原始 PDF 和完整需求文件的实际位置、逐项核对见方法审计。
+参考项目公开数据入口：[Zenodo 22897787](https://zenodo.org/records/22897787)。
+请先下载并解压，程序不下载也不生成数据。目录：
+
+```text
+sequence/
+├── filter_param.json
+├── velocity.csv              # 真值或参考速度，仅供单独评估，不输入跟踪器
+├── result.csv                # 本程序保存的六维速度（按光流更新时刻排序）
+├── dope_poses_ycb.txt        # DOPE 独立生成的预测位姿，不是数据集真值
+└── photorealistic1/
+    ├── _camera_settings.json
+    ├── _object_settings.json
+    ├── binaryevents.log
+    ├── xx.png
+    ├── xx.depth.mm.16.png
+    ├── xx.cs.png
+    ├── xx.is.png
+    ├── xx._ec.png
+    └── xx.json               # 数据集标注真值，跟踪器只读取 timestamp
+```
+
+- 通过 `bimvee` 的 IIT-YARP importer 读取 `binaryevents.log`，单位秒。按数据集帧 JSON 时间戳构造事件对。若两时钟零点不同，使用 `event_time_offset_s` 显式修正。
+- 从 `_camera_settings.json` 读取 fx/fy/cx/cy。16-bit depth PNG 由毫米变为米。
+- `xx.is.png` / `xx.cs.png` 属于**标注掩码**（oracle segmentation）；需要显式 `--allow-annotation-mask`，所有实验标明 oracle mask，不声称已经实现目标检测/分割。
+- 本适配器只支持已校准为**同一像素坐标平面**的 RGB/深度/事件，需在配置中显式设置 `assume_coregistered: true`。如果数据实际上未配准，必须先实现传感器重投影，不能直接混合像素或相机内参。
+- `filter_param.json` 被读取并保留用于原数据记录；新六维 KF/UKF 的有效参数由 `configs/tracking.json` 设置，旧 1D 测量参数不直接套到 2D E-RAFT。
+- `velocity.csv` 与每帧 `xx.json` 的 GT 位姿不用于滤波器初始化或校正。
 
 ## 安装
 
-推荐 Python 3.10、PyTorch 2.5.1+cu124。选择适合驱动的 PyTorch，再安装项目：
+推荐 Python 3.10。先根据显卡安装 PyTorch，再运行：
 
-```powershell
-python -m venv .venv
-.venv/Scripts/python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
-.venv/Scripts/python -m pip install -e ".[flow,test,visualization]"
-.venv/Scripts/python -m ev6d --help
+```bash
+python -m pip install -e .
+python -m ev6d --help
 ```
 
-Linux 改用 `.venv/bin/python`。CPU 使用 CPU PyTorch 和 `device: "cpu"`。旧 triplet 仅需 `.[test]`，YCB 渲染另需 `.[synthetic]`。本次已建立当前目录 `.venv`；实际硬件为 **RTX 2060，非 RTX 4090**。未启动正式长训练。
+依赖包括 NumPy、SciPy、OpenCV、PyTorch、bimvee。E-RAFT 为保留上游网络实现，默认 15 bins、100ms、12 次迭代；**必须提供完整兼容的预训练 checkpoint**，不允许随机网络替代。
 
-## 数据检查和已有基线
+## 用 RGB 跑 DOPE（需要官方仓库、目标权重和标定）
 
-已核对相邻 `6DOF/data/ycb_suite_labelled/`：640×480 事件、60Hz RGB-D、事件平面掩码、模拟低频位姿和已知初始位姿。模拟位姿标记 `simulated_noisy_pose_NOT_DOPE`，不能当真实 DOPE 推理。输入沿用 [schema-1](docs/data_format.md)，新接口见 [训练及稠密数据](docs/flow_training.md)。
-
-```powershell
-python -m ev6d check-data --dataset ../6DOF/data/ycb_suite_labelled/005_tomato_soup_can/regular
-python -m ev6d generate --output output/demo_data --scenario mixed --duration 0.4 --width 80 --height 60
-python -m ev6d track --dataset output/demo_data --output output/triplet_result
-python -m ev6d evaluate --dataset output/demo_data --result output/triplet_result
+```bash
+python -m ev6d prepare-rgb --sequence /data/sequence --output work/rgb
+python -m ev6d run-dope \
+  --dope-repo /path/to/Deep_Object_Pose \
+  --dope-python /path/to/dope-env/bin/python \
+  --rgb-dir work/rgb --output work/dope \
+  --weights /path/to/ycb_weights.pth \
+  --config /path/to/config_pose.yaml \
+  --camera /path/to/camera_info.yaml \
+  --object cracker
 ```
 
-## E-RAFT 推理、缓存和跟踪
+运行使用独立的 [NVIDIA DOPE](https://github.com/NVlabs/Deep_Object_Pose) 及其 Python 环境，输出位于 `work/dope/<weights_stem>/xx.json`。注意 `--camera` 应是 **RGB 相机的**标定。也可以直接使用公开数据自带的 `dope_poses_ycb.txt`，省去再次运行 DOPE 的步骤。
 
-从 [官方 README](https://github.com/uzh-rpg/E-RAFT/tree/c58ce0524ea0ebfa9849991caafb547f44fe9bfd) 获取 [DSEC checkpoint](https://download.ifi.uzh.ch/rpg/ERAFT/checkpoints/dsec.tar)，保存为 `checkpoints/dsec.tar`，无需解压。本机遗留的 `.partial` 及不完整 tar 不能使用。严格核对键与形状；权重缺失不退回随机推理。
+DOPE 输入解析约定：
+- `dope_poses_ycb.txt` 每行 `x y z axis_x axis_y axis_z angle_rad`，没有时间戳时**必须与 RGB 帧数相同**；稀疏观测使用 `t x y z axis_x axis_y axis_z angle_rad` 八列。
+- 或 `--dope-json-dir` 直接读取 NVIDIA DOPE 输出的 `xx.json`，字段 `objects[0].location`、`quaternion_xyzw`，缺失检测就跳过，绝不退回数据集 GT。
+- 位置单位 `dope_translation_unit` 必须按实际 DOPE 数据选择 `m/cm/mm`；旋转统一为 xyzw；如 RGB 与事件相机不重合，提供 `T_event_rgb` 并完成图像配准。
 
-```powershell
-python -m ev6d dense-config --output output/dense_defaults.json
-python -m ev6d precompute-flow --dataset output/demo_data --checkpoint checkpoints/dsec.tar --config configs/dense_eraft.json --output output/demo_flow --device cuda
-python -m ev6d track-dense --dataset output/demo_data --flow-cache output/demo_flow --config configs/dense_eraft.json --output output/dense_result --allow-oracle-pose
-python -m ev6d evaluate --dataset output/demo_data --result output/dense_result
-python -m ev6d reproject --dataset output/demo_data --result output/dense_result
-python -m ev6d visualize --dataset output/demo_data --result output/dense_result
+## 单命令跟踪
+
+```bash
+python -m ev6d track \
+  --sequence /data/sequence \
+  --checkpoint /path/to/dsec.tar \
+  --config configs/tracking.json \
+  --output output/sequence_run1 \
+  --device cuda \
+  --allow-annotation-mask
 ```
 
-直接运行网络：
+若使用官方 DOPE JSON，追加 `--dope-json-dir work/dope/<weights_stem>`。 `--max-intervals 2` 可小规模验证。
 
-```powershell
-python -m ev6d track-dense --dataset path/to/sequence --checkpoint checkpoints/dsec.tar --config configs/dense_eraft.json --output output/online_result --device cuda
-```
+输出：
+- `sequence/result.csv` 六列 `l_v_x,l_v_y,l_v_z,a_v_x,a_v_y,a_v_z`，对应一个光流时间窗一次速度后验；保持参考仓库列名。
+- `output/.../trajectory.csv` 逐时刻 `t,p_xyz,q_xyzw,v_O,omega,v_reference`。
+- `output/.../diagnostics.json` 记录是否启用标注 mask、观测数量、光流来源、耗时、状态拒绝原因。
 
-已知合成/GT 初始化或 oracle 位姿须显式 `--allow-oracle-pose`，并记录来源；真实外部初始化不需要。`--velocity-only` 禁用低频观测并标记速度积分模式，`--max-intervals 2` 用于短验证。“在线”指按采集/到达时间因果回放，无传感器驱动或硬实时承诺。`visualize` 是需要 GT 的三维对照；无 GT 可用 `evaluate` 定性曲线和 `reproject`。
+重要：`v_O` 是相机坐标系下的空间 twist 平移分量，物体参考点线速度为 `v_reference=v_O+omega×p`，两者不能混为一谈。光流是 **pixel/interval**，KF 显式乘一次 dt。DOPE 提供低频估计而非真实位姿真值。初始 DOPE 必须在其采集时间已可用；若存在初始延迟，需要另供可用初值。后续延迟观测使用有限历史重放。默认 DOPE 更新限制为 5 Hz（\`dope_max_hz\`），可修改配置。
 
-默认 100ms 固定窗口：`[t0-dt,t0)`、`[t0,t1)` 输出 `[1,2,H,W]` 前向位移 pixel/interval。网络使用最后全分辨率预测；后端只做一次 dt 转换。第二窗口结束及可用时间后更新速度，用于后续预测，不回写已发布轨迹。源深度/掩码在 t0 冻结，不能配终点几何。无 warm-start；标准 E-RAFT 没有原生已标定置信度。
+为保护已有实验，如果 sequence/result.csv 已存在，跟踪结束时会拒绝覆盖；请先重命名旧文件。
 
-深度使用有限年龄的历史采样，没有运动补偿。长窗口下的恒速、一阶光流关系是近似；不能缩放输出就声称 5/10ms 与训练条件等价。延迟位姿使用有界历史回溯重放；KF/UKF 间以及跨时段速度相关性仍作近似。
+## 验证边界
 
-## 独立训练、微调和恢复
-
-按 [DSEC 实际格式](docs/flow_training.md) 准备不同训练/验证序列，编辑 [训练配置](configs/train_dsec.json) 的目录、序列和权重。配置中序列是可改示例，不宣称官方划分。`initialization.checkpoint` 指定官方权重以微调，`null` 为从头训练。
-
-```powershell
-python -m ev6d train-flow --config configs/train_dsec.json
-python -m ev6d train-flow --config configs/train_dsec.json --resume output/dsec_finetune/last.pt --output output/dsec_resume
-python -m ev6d evaluate-flow --config configs/train_dsec.json --checkpoint output/dsec_finetune/last.pt --output output/dsec_eval.json
-```
-
-训练独立于 KF/UKF，包含迭代有效像素监督、验证、优化器/调度器、裁剪、种子和恢复，保存模型/配置/优化器/调度器/进度/随机状态/体素元数据和序列划分。无跨样本 warm-start 时序训练，与论文设置有区别。
-
-只验证可运行性的小样例：
-
-```powershell
-python -m ev6d flow-fixture --output output/completion_20260923/dsec_fixture
-python -m ev6d train-flow --config configs/train_flow_smoke.json --max-steps 2
-python -m ev6d train-flow --config configs/train_flow_smoke.json --resume output/completion_20260923/flow_smoke/last.pt --output output/completion_20260923/flow_resume --max-steps 4
-python -m ev6d evaluate-flow --config configs/train_flow_smoke.json --checkpoint output/completion_20260923/flow_resume/last.pt --output output/completion_20260923/flow_eval.json
-```
-
-若路径已存在请选新目录并修改配置。`--max-steps` 为累计目标优化步数。128×128 单像素平移 fixture 只检验训练/保存/恢复管线，权重可由跟踪器加载，但无真实精度意义。DSEC 驾驶光流数据不能替代目标物体 RGB-D/位姿下游数据。
-
-## 输出和评估
-
-| 文件 | 内容 |
-| --- | --- |
-| `trajectory.npz/csv` | 时间、位置、xyzw 四元数、`v_O`、角速度、参考点线速度 `v_reference`、状态与方差 |
-| `runtime.json`、`diagnostics.json` | 来源、拒绝原因、深度年龄、观测数、重放、各模块及端到端耗时 |
-| 缓存 `manifest.json`、`flow_*.npz` | 起止/可用时间、源坐标系、掩码、预处理、序列校验 |
-| `metrics.json`、`errors.npz`、`tracking.png` | 有 GT 时的位姿、空间速度、参考点线速度、角速度误差 |
-| `qualitative_report.json` | 无 GT 时的定性报告，不生成伪 RMSE |
-| `reprojection/` | RGB 相机上的坐标轴及已知尺寸包围盒；非网格渲染 |
-
-`T_A_B` 把 B 变到 A，秒/米/rad/s，`X_dot=v_O+omega×X`，`v_reference=v_O+omega×p`。参考点是物体坐标原点，未必几何中心；相对相机运动不宣称世界绝对速度。ADD/ADD-S 仅在显式提供物体点、米单位及指标约定时计算。
-
-公平对照须固定划分、深度、掩码、RGB 位姿和到达时序，分别缓存冻结网络和微调网络，与同一序列的 triplet 比较。换权重不等于精度提升，网络 forward 时间不等于系统延迟。
-
-资源准备好后可执行对照脚本；它记录权重哈希和共同输入，另在相同输出时刻插值评测，并明确记录旧 triplet 与新后端的延迟处理差异：
-
-```powershell
-python scripts/compare_frontends.py --dataset path/to/sequence --frozen-checkpoint checkpoints/dsec.tar --finetuned-checkpoint output/dsec_finetune/last.pt --dense-config configs/dense_eraft.json --output output/comparison
-```
-
-目标区域光流 GT 的 `evaluate-flow-cache` 用法见 [数据与训练说明](docs/flow_training.md)。
-
-```powershell
-python -m pytest -q
-```
-
-本次实际结果和资源缺口见 [交付验证](docs/completion_validation.md)。真实 DSEC、完整官方权重、带标定实测目标数据/外部位姿/真值、4090 全分辨率性能仍须验证。未新增位姿网络训练、实例分割、传感器驱动或 ROFT 联合速度/位姿 UKF。
+这是仅保留单一路线的工程重构；未声称已达到原论文的准确率、10ms 高频速度估计或实机实时性能。窗口约 100ms 带来更新延迟，DSEC 训练的 E-RAFT 在 UE/YCB 上存在域迁移风险。原始合成数据结果不是此公开数据集上的有效基准。必须使用真实官方权重、DOPE 目标权重、完整公开数据和独立精度评估后才能汇报最终结果。
